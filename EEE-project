@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time ECG and Respiratory Audio</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+
+        #mainContainer {
+            display: flex;
+            width: 70vw;
+            height: 50vh;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #000;
+            margin-top: 20px;
+        }
+
+        #canvasContainer {
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        #ecgCanvas {
+            height: 100%;
+        }
+
+        #yAxisLabels {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 50px;
+            border-right: 1px solid #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+
+        .y-label {
+            text-align: right;
+            margin: 0;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #bpmDisplay {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            font-size: 1.5em;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        #connectButton, #lungSoundsButton {
+            padding: 10px;
+            margin: 10px;
+            background-color: lightblue;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Real-Time ECG and Respiratory Audio</h2>
+        <button id="connectButton">Connect to WiFi Device</button>
+        <button id="lungSoundsButton">Respiratory Audio</button>
+        <div id="mainContainer">
+            <div id="yAxisLabels"></div>
+            <div id="canvasContainer">
+                <canvas id="ecgCanvas"></canvas>
+            </div>
+            <div id="bpmDisplay">BPM: <span id="bpmValue">--</span></div>
+        </div>
+        <audio id="lungSoundsAudio" controls style="display: none;">
+            <source src="lung_sounds.mp3" type="audio/mp3">
+            Your browser does not support the audio element.
+        </audio>
+    </div>
+        
+    <script>
+        // Variables for ECG data
+        let ecgData = [];
+
+        const canvas = document.getElementById('ecgCanvas');
+        const ctx = canvas.getContext('2d');
+        const bpmValueElement = document.getElementById('bpmValue');
+        const container = document.getElementById('canvasContainer');
+        let scrollAmount = 1; // Auto-scroll speed
+        let socket; // WebSocket connection
+
+        // Adjust canvas dimensions
+        function adjustCanvas() {
+            const canvasWidth = ecgData.length * 5;  // Adjust width as data grows
+            canvas.width = canvasWidth;
+            canvas.height = document.getElementById('mainContainer').clientHeight;
+        }
+
+        // Draw the ECG graph
+        function drawECG() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);  // Clear the canvas
+
+            const height = canvas.height;
+            const yMax = 300;  // Example max value, adjust as needed
+            const yMin = 0;    // Example min value, adjust as needed
+            const yRange = yMax - yMin;
+            const yScale = height / yRange;  // Scale ECG data to fit the canvas height
+            const xStep = 5;  // Space between points
+
+            ctx.beginPath();
+            ecgData.forEach((value, i) => {
+                const x = i * xStep;
+                const y = height - ((value - yMin) * yScale);  // Invert Y-axis for canvas
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+
+            ctx.strokeStyle = 'blue';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // Scroll the graph automatically
+        function autoScroll() {
+            if (container.scrollLeft + container.clientWidth >= canvas.width) {
+                container.scrollLeft = 0;
+            } else {
+                container.scrollLeft += scrollAmount;
+            }
+            requestAnimationFrame(autoScroll);
+        }
+
+        // Handle WebSocket connection for WiFi data
+        function connectWiFi() {
+            socket = new WebSocket("ws://your_server_ip_or_address:port"); // Update with your server details
+
+            socket.onopen = () => {
+                console.log("Connected to the WiFi device via WebSocket");
+            };
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const bpm = data.bpm;  // Example: extracting BPM data
+                const ecg = data.ecg;  // Example: extracting ECG data array
+
+                bpmValueElement.textContent = bpm;  // Update BPM in the UI
+
+                ecgData.push(...ecg);
+                if (ecgData.length > 500) {  // Limit data to avoid performance issues
+                    ecgData = ecgData.slice(-500);
+                }
+
+                adjustCanvas();
+                drawECG();
+            };
+
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+
+            socket.onclose = () => {
+                console.log("WebSocket connection closed");
+            };
+        }
+
+        // Play Lung Sounds
+        function displayLungSounds() {
+            const lungSoundsAudio = document.getElementById('lungSoundsAudio');
+            lungSoundsAudio.style.display = 'block';
+            lungSoundsAudio.play();
+        }
+
+        // Start everything
+        document.getElementById('connectButton').addEventListener('click', connectWiFi);
+        document.getElementById('lungSoundsButton').addEventListener('click', displayLungSounds);
+        autoScroll();
+    </script>
+
+</body>
+</html>
